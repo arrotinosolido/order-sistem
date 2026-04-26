@@ -1,55 +1,97 @@
-import asyncio
+from flask import Flask, render_template, request, session, redirect, jsonify
 import asyncpg
 import os
-from aiogram import Bot, Dispatcher, types
-from aiogram.filters import Command
+import asyncio
+import requests
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+app = Flask(__name__, template_folder="templates")
+app.secret_key = os.urandom(24)
+
 DATABASE_URL = os.getenv("DATABASE_URL")
-
-bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher()
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "1234")
 
 
 # ---------------- DB ----------------
-async def save_order(user_id, username, text):
+async def get_orders():
     conn = await asyncpg.connect(DATABASE_URL)
-    await conn.execute(
-        "INSERT INTO orders(user_id, username, order_text) VALUES($1,$2,$3)",
-        user_id, username, text
-    )
+    rows = await conn.fetch("SELECT * FROM orders ORDER BY id DESC")
     await conn.close()
+    return [dict(r) for r in rows]
 
 
-# ---------------- START ----------------
-@dp.message(Command("start"))
-async def start(msg: types.Message):
-    await msg.answer(
-        "🍔 Добро пожаловать!\n\n"
-        "Просто отправь заказ текстом 👇"
+async def set_ready(order_id):
+    conn = await asyncpg.connect(DATABASE_URL)
+
+    order = await conn.fetchrow(
+        "SELECT * FROM orders WHERE id=$1",
+        order_id
     )
 
+    if order:
+        await conn.execute(
+            "UPDATE orders SET status='ready' WHERE id=$1",
+            order_id
+        )
 
-# ---------------- ORDER ----------------
-@dp.message()
-async def order(msg: types.Message):
+    await conn.close()
+    return order
 
-    user_id = msg.from_user.id
-    username = msg.from_user.username or msg.from_user.full_name
-    text = msg.text
 
-    await save_order(user_id, username, text)
+# ---------------- LOGIN ----------------
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        if request.form.get("password") == ADMIN_PASSWORD:
+            session["ok"] = True
+            return redirect("/")
+    return """
+        <form method="post">
+            <input name="password" type="password">
+            <button>Login</button>
+        </form>
+    """
 
-    await msg.answer(
-        "✅ Заказ принят!\nОжидайте подтверждения 👨‍🍳"
-    )
+
+# ---------------- PANEL ----------------
+@app.route("/")
+def index():
+    if not session.get("ok"):
+        return redirect("/login")
+    return render_template("index.html")
+
+
+# ---------------- API ----------------
+@app.route("/api/orders")
+def api():
+    if not session.get("ok"):
+        return redirect("/login")
+
+    return jsonify(asyncio.run(get_orders()))
+
+
+# ---------------- READY ----------------
+@app.route("/ready/<int:oid>", methods=["POST"])
+def ready(oid):
+
+    order = asyncio.run(set_ready(oid))
+
+    if order:
+        try:
+            requests.post(
+                f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+                json={
+                    "chat_id": order["user_id"],
+                    "text": f"🎉 Ваш заказ #{oid} ГОТОВ!"
+                }
+            )
+        except:
+            pass
+
+    return {"ok": True}
 
 
 # ---------------- RUN ----------------
-async def main():
-    print("Bot started")
-    await dp.start_polling(bot)
-
-
 if __name__ == "__main__":
-    asyncio.run(main())
+    port = int(os.getenv("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)
