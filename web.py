@@ -5,23 +5,32 @@ import os
 import threading
 from aiogram import Bot
 
+# --------------------
 # ENV
+# --------------------
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 DATABASE_URL = os.getenv("DATABASE_URL")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "1234")
 
-# Flask app
-app = Flask(__name__)
+# --------------------
+# FLASK (ВАЖНО: template_folder фиксирует проблему Railway)
+# --------------------
+app = Flask(__name__, template_folder="templates")
 app.secret_key = os.urandom(24)
 
-# Telegram bot (только для отправки сообщений)
+# --------------------
+# TELEGRAM BOT (ТОЛЬКО SEND MESSAGE, БЕЗ POLLING!)
+# --------------------
 bot = Bot(token=BOT_TOKEN)
 
 
-# -----------------------
+# --------------------
 # DB
-# -----------------------
+# --------------------
 async def fetch_orders():
+    if not DATABASE_URL:
+        return []
+
     conn = await asyncpg.connect(DATABASE_URL)
     rows = await conn.fetch(
         "SELECT * FROM orders ORDER BY id DESC LIMIT 50"
@@ -30,9 +39,9 @@ async def fetch_orders():
     return [dict(r) for r in rows]
 
 
-# -----------------------
-# AUTH
-# -----------------------
+# --------------------
+# LOGIN
+# --------------------
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
@@ -53,32 +62,38 @@ def logout():
     return redirect("/login")
 
 
-# -----------------------
-# UI
-# -----------------------
+# --------------------
+# MAIN PAGE
+# --------------------
 @app.route("/")
 def index():
     if not session.get("ok"):
         return redirect("/login")
+
     return render_template("index.html")
 
 
-# -----------------------
-# API
-# -----------------------
+# --------------------
+# API ORDERS
+# --------------------
 @app.route("/api/orders")
 def api_orders():
     if not session.get("ok"):
         return redirect("/login")
-    return asyncio.run(fetch_orders())
+
+    return jsonify(asyncio.run(fetch_orders()))
 
 
-# -----------------------
+# --------------------
 # READY ORDER
-# -----------------------
+# --------------------
 @app.route("/ready/<int:oid>", methods=["POST"])
 def ready(oid):
+
     async def process():
+        if not DATABASE_URL:
+            return
+
         conn = await asyncpg.connect(DATABASE_URL)
 
         order = await conn.fetchrow(
