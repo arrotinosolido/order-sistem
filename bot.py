@@ -10,8 +10,28 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# временное хранение заказов (пока не подтверждены)
-user_temp_order = {}
+# корзины пользователей
+cart = {}
+
+
+# ---------------- MENU ----------------
+def menu_keyboard():
+    return types.ReplyKeyboardMarkup(
+        keyboard=[
+            [types.KeyboardButton(text="🍔 Бургер - 5€")],
+            [types.KeyboardButton(text="🍕 Пицца - 8€")],
+            [types.KeyboardButton(text="🥤 Кола - 2€")],
+            [types.KeyboardButton(text="🛒 Корзина")],
+        ],
+        resize_keyboard=True
+    )
+
+
+def cart_keyboard():
+    return types.InlineKeyboardMarkup(inline_keyboard=[
+        [types.InlineKeyboardButton(text="✅ Подтвердить заказ", callback_data="confirm")],
+        [types.InlineKeyboardButton(text="❌ Очистить", callback_data="clear")]
+    ])
 
 
 # ---------------- DB ----------------
@@ -27,93 +47,77 @@ async def save_order(user_id, username, text):
 # ---------------- START ----------------
 @dp.message(Command("start"))
 async def start(msg: types.Message):
-    keyboard = types.ReplyKeyboardMarkup(
-        keyboard=[
-            [types.KeyboardButton(text="🍔 Сделать заказ")],
-            [types.KeyboardButton(text="📦 Мои заказы")]
-        ],
-        resize_keyboard=True
-    )
-
-    await msg.answer("👋 Добро пожаловать!", reply_markup=keyboard)
+    cart[msg.from_user.id] = []
+    await msg.answer("👋 Выбери еду из меню:", reply_markup=menu_keyboard())
 
 
-# ---------------- MAIN FLOW ----------------
+# ---------------- HANDLE MENU ----------------
 @dp.message()
 async def handler(msg: types.Message):
+
     user_id = msg.from_user.id
     text = msg.text
 
+    if user_id not in cart:
+        cart[user_id] = []
 
-    # 🍔 начать заказ
-    if text == "🍔 Сделать заказ":
-        await msg.answer("Напиши что хочешь заказать 👇")
-        user_temp_order[user_id] = {"step": "writing"}
+
+    # добавление в корзину
+    if text in ["🍔 Бургер - 5€", "🍕 Пицца - 8€", "🥤 Кола - 2€"]:
+        cart[user_id].append(text)
+        await msg.answer(f"➕ Добавлено: {text}")
         return
 
 
-    # 📦 мои заказы (упрощённо)
-    if text == "📦 Мои заказы":
-        await msg.answer("Заказы можно посмотреть в панели администратора 🖥")
-        return
+    # показать корзину
+    if text == "🛒 Корзина":
 
-
-    # если пользователь в процессе заказа
-    if user_id in user_temp_order:
-
-        if user_temp_order[user_id]["step"] == "writing":
-            user_temp_order[user_id] = {
-                "step": "confirm",
-                "text": text
-            }
-
-            keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
-                [
-                    types.InlineKeyboardButton(text="✅ Подтвердить", callback_data="confirm"),
-                    types.InlineKeyboardButton(text="❌ Отмена", callback_data="cancel")
-                ]
-            ])
-
-            await msg.answer(
-                f"🧾 Проверь заказ:\n\n{text}",
-                reply_markup=keyboard
-            )
+        if not cart[user_id]:
+            await msg.answer("🛒 Корзина пуста")
             return
 
+        order_text = "\n".join(cart[user_id])
 
-# ---------------- CONFIRM ----------------
+        await msg.answer(
+            f"🧾 Ваша корзина:\n\n{order_text}",
+            reply_markup=cart_keyboard()
+        )
+        return
+
+
+# ---------------- CALLBACK ----------------
 @dp.callback_query()
 async def callback(call: types.CallbackQuery):
 
     user_id = call.from_user.id
 
-    # отмена
-    if call.data == "cancel":
-        user_temp_order.pop(user_id, None)
-        await call.message.edit_text("❌ Заказ отменён")
+    # очистка корзины
+    if call.data == "clear":
+        cart[user_id] = []
+        await call.message.edit_text("❌ Корзина очищена")
         return
 
 
-    # подтверждение
+    # подтверждение заказа
     if call.data == "confirm":
 
-        order_data = user_temp_order.get(user_id)
+        items = cart.get(user_id, [])
 
-        if not order_data:
-            await call.answer("Нет заказа")
+        if not items:
+            await call.answer("Корзина пуста")
             return
 
-        text = order_data["text"]
+        order_text = "\n".join(items)
 
         await save_order(
             user_id,
             call.from_user.username or call.from_user.full_name,
-            text
+            order_text
         )
 
-        user_temp_order.pop(user_id, None)
+        cart[user_id] = []
 
-        await call.message.edit_text("✅ Заказ отправлен администратору!")
+        await call.message.edit_text("✅ Заказ отправлен!")
         return
 
 
