@@ -4,49 +4,57 @@ import os
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 
-BOT_TOKEN = os.getenv('BOT_TOKEN')
-DATABASE_URL = os.getenv('DATABASE_URL')
+# -------------------
+# ENV
+# -------------------
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-async def get_db():
-    return await asyncpg.connect(DATABASE_URL)
 
-async def init_db():
-    conn = await get_db()
-    await conn.execute('''
-        CREATE TABLE IF NOT EXISTS orders (
-            id SERIAL PRIMARY KEY,
-            user_id BIGINT,
-            username TEXT,
-            order_text TEXT,
-            status TEXT DEFAULT 'new',
-            created_at TIMESTAMP DEFAULT NOW()
-        )
-    ''')
-    await conn.close()
-
-@dp.message(Command('start'))
-async def start(m: types.Message):
-    await m.answer('🍔 Отправь заказ текстом')
-
-@dp.message()
-async def order(m: types.Message):
-    conn = await get_db()
-    row = await conn.fetchrow(
-        """INSERT INTO orders(user_id, username, order_text)
-        VALUES($1,$2,$3) RETURNING id""",
-        m.from_user.id,
-        m.from_user.username or m.from_user.full_name,
-        m.text
+# -------------------
+# DB
+# -------------------
+async def save_order(user_id, username, text):
+    conn = await asyncpg.connect(DATABASE_URL)
+    await conn.execute(
+        "INSERT INTO orders(user_id, username, order_text) VALUES($1,$2,$3)",
+        user_id, username, text
     )
     await conn.close()
-    await m.answer(f'✅ Заказ #{row["id"]} принят!')
 
+
+# -------------------
+# START
+# -------------------
+@dp.message(Command("start"))
+async def start(msg: types.Message):
+    await msg.answer("🍔 Отправь заказ текстом")
+
+
+# -------------------
+# ORDER
+# -------------------
+@dp.message()
+async def order(msg: types.Message):
+    await save_order(
+        msg.from_user.id,
+        msg.from_user.username or msg.from_user.full_name,
+        msg.text
+    )
+
+    await msg.answer("✅ Заказ принят!")
+
+
+# -------------------
+# MAIN
+# -------------------
 async def main():
-    await init_db()
+    print("Bot started...")
     await dp.start_polling(bot)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     asyncio.run(main())
