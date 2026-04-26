@@ -1,4 +1,2 @@
-aiogram==3.*
-flask==3.*
-asyncpg==0.29.0
-gunicorn==21.2.0
+flask
+aiogram
