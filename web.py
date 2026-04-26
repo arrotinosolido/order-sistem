@@ -38,7 +38,7 @@ async def set_ready(order_id):
     return order
 
 
-# ---------------- LOGIN ----------------
+# ---------------- AUTH ----------------
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
@@ -75,16 +75,12 @@ def ready(oid):
     order = asyncio.run(set_ready(oid))
 
     if order:
-        user_id = order["user_id"]
-        text = order["order_text"]
-
-        # отправка в Telegram через Bot API (без aiogram конфликтов)
         try:
             requests.post(
                 f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
                 json={
-                    "chat_id": user_id,
-                    "text": f"🎉 Ваш заказ #{oid} ГОТОВ!\n\n🍔 {text}"
+                    "chat_id": order["user_id"],
+                    "text": f"🎉 Ваш заказ #{oid} ГОТОВ!\n\n🍔 {order['order_text']}"
                 }
             )
         except Exception as e:
