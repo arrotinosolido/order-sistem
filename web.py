@@ -5,54 +5,107 @@ import os
 import threading
 from aiogram import Bot
 
-BOT_TOKEN = os.getenv('BOT_TOKEN')
-DATABASE_URL = os.getenv('DATABASE_URL')
-ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', '1234')
+# ENV
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+DATABASE_URL = os.getenv("DATABASE_URL")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "1234")
 
+# Flask app
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
+# Telegram bot (только для отправки сообщений)
 bot = Bot(token=BOT_TOKEN)
 
+
+# -----------------------
+# DB
+# -----------------------
 async def fetch_orders():
     conn = await asyncpg.connect(DATABASE_URL)
-    rows = await conn.fetch('SELECT * FROM orders ORDER BY id DESC LIMIT 50')
+    rows = await conn.fetch(
+        "SELECT * FROM orders ORDER BY id DESC LIMIT 50"
+    )
     await conn.close()
     return [dict(r) for r in rows]
 
-@app.route('/login', methods=['GET','POST'])
+
+# -----------------------
+# AUTH
+# -----------------------
+@app.route("/login", methods=["GET", "POST"])
 def login():
-    if request.method == 'POST':
-        if request.form.get('password') == ADMIN_PASSWORD:
-            session['ok'] = True
-            return redirect('/')
-    return '<form method=post><input name=password><button>Login</button></form>'
+    if request.method == "POST":
+        if request.form.get("password") == ADMIN_PASSWORD:
+            session["ok"] = True
+            return redirect("/")
+    return """
+        <form method="post">
+            <input name="password" type="password" placeholder="password">
+            <button type="submit">Login</button>
+        </form>
+    """
 
-@app.route('/')
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect("/login")
+
+
+# -----------------------
+# UI
+# -----------------------
+@app.route("/")
 def index():
-    if not session.get('ok'):
-        return redirect('/login')
-    return render_template('index.html')
+    if not session.get("ok"):
+        return redirect("/login")
+    return render_template("index.html")
 
-@app.route('/api/orders')
-def api():
-    if not session.get('ok'):
-        return redirect('/login')
+
+# -----------------------
+# API
+# -----------------------
+@app.route("/api/orders")
+def api_orders():
+    if not session.get("ok"):
+        return redirect("/login")
     return asyncio.run(fetch_orders())
 
-@app.route('/ready/<int:oid>', methods=['POST'])
+
+# -----------------------
+# READY ORDER
+# -----------------------
+@app.route("/ready/<int:oid>", methods=["POST"])
 def ready(oid):
     async def process():
         conn = await asyncpg.connect(DATABASE_URL)
-        order = await conn.fetchrow('SELECT * FROM orders WHERE id=$1', oid)
+
+        order = await conn.fetchrow(
+            "SELECT * FROM orders WHERE id=$1",
+            oid
+        )
+
         if order:
-            await conn.execute('UPDATE orders SET status=$1 WHERE id=$2','ready',oid)
-            await bot.send_message(order['user_id'], f'🎉 Заказ #{oid} готов!')
+            await conn.execute(
+                "UPDATE orders SET status=$1 WHERE id=$2",
+                "ready",
+                oid
+            )
+
+            try:
+                await bot.send_message(
+                    order["user_id"],
+                    f"🎉 Заказ #{oid} ГОТОВ!\nПриятного аппетита 🍔"
+                )
+            except Exception as e:
+                print("Telegram error:", e)
+
         await conn.close()
 
-    threading.Thread(target=lambda: asyncio.run(process())).start()
-    return {'ok': True}
+    threading.Thread(
+        target=lambda: asyncio.run(process()),
+        daemon=True
+    ).start()
 
-if __name__ == '__main__':
-    port = int(os.getenv('PORT', 8080))
-    app.run(host='0.0.0.0', port=port)
+    return {"ok": True}
