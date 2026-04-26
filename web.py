@@ -12,14 +12,21 @@ app = Flask(__name__, template_folder="templates")
 app.secret_key = os.urandom(24)
 
 
-# ---------------- DB ----------------
+# ---------------- DB: GET ACTIVE ORDERS ----------------
 async def get_orders():
     conn = await asyncpg.connect(DATABASE_URL)
-    rows = await conn.fetch("SELECT * FROM orders ORDER BY id DESC")
+
+    rows = await conn.fetch("""
+        SELECT * FROM orders
+        WHERE status IS NULL OR status != 'ready'
+        ORDER BY id DESC
+    """)
+
     await conn.close()
     return [dict(r) for r in rows]
 
 
+# ---------------- DB: MARK READY ----------------
 async def set_ready(order_id):
     conn = await asyncpg.connect(DATABASE_URL)
 
@@ -38,7 +45,7 @@ async def set_ready(order_id):
     return order
 
 
-# ---------------- AUTH ----------------
+# ---------------- LOGIN ----------------
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
@@ -53,6 +60,13 @@ def login():
     """
 
 
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect("/login")
+
+
+# ---------------- PANEL ----------------
 @app.route("/")
 def index():
     if not session.get("ok"):
@@ -68,7 +82,7 @@ def api_orders():
     return jsonify(asyncio.run(get_orders()))
 
 
-# ---------------- READY + TELEGRAM ----------------
+# ---------------- READY ACTION ----------------
 @app.route("/ready/<int:oid>", methods=["POST"])
 def ready(oid):
 
