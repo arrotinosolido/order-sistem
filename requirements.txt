@@ -1,4 +1,0 @@
-flask
-asyncpg
-aiogram
-requests
