@@ -15,7 +15,6 @@ def db():
     return psycopg2.connect(DATABASE_URL, sslmode="require")
 
 
-# 🔥 создаём таблицу если нет
 def init_db():
     conn = db()
     cur = conn.cursor()
@@ -33,28 +32,22 @@ def init_db():
     conn.close()
 
 
-# 🔥 стабильная отправка в Telegram (без asyncio)
-def send_telegram(user_id, text):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+def send(user_id, text):
     try:
-        requests.post(url, json={
-            "chat_id": user_id,
-            "text": text
-        }, timeout=5)
-    except Exception as e:
-        print("TG ERROR:", e)
+        requests.post(
+            f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+            json={"chat_id": user_id, "text": text},
+            timeout=5
+        )
+    except:
+        pass
 
 
 def get_orders():
     conn = db()
     cur = conn.cursor()
 
-    cur.execute("""
-        SELECT id, user_id, text, status
-        FROM orders
-        ORDER BY id DESC
-    """)
-
+    cur.execute("SELECT id, user_id, text, status FROM orders ORDER BY id DESC")
     rows = cur.fetchall()
     conn.close()
 
@@ -64,19 +57,18 @@ def get_orders():
     ]
 
 
-def set_ready(order_id):
+def update_status(order_id, status):
     conn = db()
     cur = conn.cursor()
 
     cur.execute("""
         UPDATE orders
-        SET status='ready'
+        SET status=%s
         WHERE id=%s
         RETURNING user_id
-    """, (order_id,))
+    """, (status, order_id))
 
     user = cur.fetchone()
-
     conn.commit()
     conn.close()
 
@@ -106,16 +98,21 @@ def api_orders():
     return jsonify(get_orders())
 
 
+# 🟡 В РАБОТЕ
+@app.route("/cook/<int:order_id>", methods=["POST"])
+def cook(order_id):
+    user_id = update_status(order_id, "cooking")
+    if user_id:
+        send(user_id, f"👨‍🍳 Заказ #{order_id} готовится")
+    return {"ok": True}
+
+
+# 🟢 ГОТОВО
 @app.route("/ready/<int:order_id>", methods=["POST"])
 def ready(order_id):
-    if not session.get("ok"):
-        return redirect("/login")
-
-    user_id = set_ready(order_id)
-
+    user_id = update_status(order_id, "ready")
     if user_id:
-        send_telegram(user_id, f"🎉 Ваш заказ #{order_id} готов!")
-
+        send(user_id, f"🎉 Заказ #{order_id} готов!")
     return {"ok": True}
 
 
