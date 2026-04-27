@@ -18,6 +18,29 @@ def db():
     return psycopg2.connect(DATABASE_URL, sslmode="require")
 
 
+# 🔥 АВТО-СОЗДАНИЕ ТАБЛИЦЫ И КОЛОНКИ
+def init_db():
+    conn = db()
+    cur = conn.cursor()
+
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS orders (
+        id SERIAL PRIMARY KEY,
+        user_id BIGINT,
+        text TEXT,
+        status TEXT DEFAULT 'new'
+    );
+    """)
+
+    cur.execute("""
+    ALTER TABLE orders
+    ADD COLUMN IF NOT EXISTS text TEXT;
+    """)
+
+    conn.commit()
+    conn.close()
+
+
 def get_orders():
     conn = db()
     cur = conn.cursor()
@@ -86,5 +109,6 @@ def ready(order_id):
 
 
 if __name__ == "__main__":
+    init_db()  # 🔥 ВАЖНО
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
