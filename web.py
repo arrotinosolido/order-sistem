@@ -1,71 +1,57 @@
-from flask import Flask, jsonify
-import asyncio
+from flask import Flask, render_template, request, redirect, session, jsonify
 import asyncpg
+import asyncio
 import os
-import requests
+import threading
+from aiogram import Bot
+
+BOT_TOKEN = os.getenv('BOT_TOKEN')
+DATABASE_URL = os.getenv('DATABASE_URL')
+ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', '1234')
 
 app = Flask(__name__)
+app.secret_key = os.urandom(24)
 
-DATABASE_URL = os.getenv("DATABASE_URL")
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+bot = Bot(token=BOT_TOKEN)
 
-
-async def get_orders():
+async def fetch_orders():
     conn = await asyncpg.connect(DATABASE_URL)
-    rows = await conn.fetch("SELECT * FROM orders ORDER BY id DESC")
+    rows = await conn.fetch('SELECT * FROM orders ORDER BY id DESC LIMIT 50')
     await conn.close()
     return [dict(r) for r in rows]
 
+@app.route('/login', methods=['GET','POST'])
+def login():
+    if request.method == 'POST':
+        if request.form.get('password') == ADMIN_PASSWORD:
+            session['ok'] = True
+            return redirect('/')
+    return '<form method=post><input name=password><button>Login</button></form>'
 
-async def set_ready(order_id):
-    conn = await asyncpg.connect(DATABASE_URL)
+@app.route('/')
+def index():
+    if not session.get('ok'):
+        return redirect('/login')
+    return render_template('index.html')
 
-    order = await conn.fetchrow(
-        "SELECT * FROM orders WHERE id=$1",
-        order_id
-    )
+@app.route('/api/orders')
+def api():
+    if not session.get('ok'):
+        return redirect('/login')
+    return asyncio.run(fetch_orders())
 
-    if order:
-        await conn.execute(
-            "UPDATE orders SET status='ready' WHERE id=$1",
-            order_id
-        )
-
-    await conn.close()
-    return order
-
-
-@app.route("/")
-def home():
-    return "🚀 ORDER SYSTEM WORKING"
-
-
-@app.route("/orders")
-def orders():
-    return jsonify(asyncio.run(get_orders()))
-
-
-@app.route("/ready/<int:oid>", methods=["POST"])
+@app.route('/ready/<int:oid>', methods=['POST'])
 def ready(oid):
-    order = asyncio.run(set_ready(oid))
+    async def process():
+        conn = await asyncpg.connect(DATABASE_URL)
+        order = await conn.fetchrow('SELECT * FROM orders WHERE id=$1', oid)
+        if order:
+            await conn.execute('UPDATE orders SET status=$1 WHERE id=$2','ready',oid)
+            await bot.send_message(order['user_id'], f'🎉 Заказ #{oid} готов!')
+        await conn.close()
 
-    if order:
-        try:
-            requests.post(
-                f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-                json={
-                    "chat_id": order["user_id"],
-                    "text": f"🎉 Заказ #{oid} готов!"
-                }
-            )
-        except:
-            pass
+    threading.Thread(target=lambda: asyncio.run(process())).start()
+    return {'ok': True}
 
-    return {"ok": True}
-
-
-if __name__ == "__main__":
-    print("🚀 WEB STARTED")
-
-    port = int(os.getenv("PORT", 8080))
-    app.run(host="0.0.0.0", port=port)
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
