@@ -1,30 +1,30 @@
-from flask import Flask, render_template, request, redirect, session, jsonify
+from flask import Flask, render_template, redirect, session, jsonify, request
 import psycopg2
 import os
 import asyncio
 from aiogram import Bot
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-DATABASE_URL = os.getenv("postgresql://postgres:LFdIShpQjedEyyAZtdmgVdmfWmzjmEVQ@postgres.railway.internal:5432/railway")
+DATABASE_URL = os.getenv("DATABASE_URL")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "1234")
 
 app = Flask(__name__)
-app.secret_key = os.urandom(24)
+app.secret_key = "secret"
 
 bot = Bot(token=BOT_TOKEN)
 
 
-# -------- DB --------
-
-def get_conn():
-    return psycopg2.connect(DATABASE_URL)
+def db():
+    return psycopg2.connect(DATABASE_URL, sslmode="require")
 
 
-def fetch_orders():
-    conn = get_conn()
+def get_orders():
+    conn = db()
     cur = conn.cursor()
+
     cur.execute("SELECT id, user_id, text, status FROM orders ORDER BY id DESC")
     rows = cur.fetchall()
+
     conn.close()
 
     return [
@@ -34,16 +34,20 @@ def fetch_orders():
 
 
 def set_ready(order_id):
-    conn = get_conn()
+    conn = db()
     cur = conn.cursor()
-    cur.execute("UPDATE orders SET status='ready' WHERE id=%s RETURNING user_id", (order_id,))
+
+    cur.execute(
+        "UPDATE orders SET status='ready' WHERE id=%s RETURNING user_id",
+        (order_id,)
+    )
+
     user = cur.fetchone()
     conn.commit()
     conn.close()
+
     return user[0] if user else None
 
-
-# -------- AUTH --------
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -54,8 +58,6 @@ def login():
     return "<form method='post'><input name='password'><button>Login</button></form>"
 
 
-# -------- UI --------
-
 @app.route("/")
 def index():
     if not session.get("ok"):
@@ -63,13 +65,11 @@ def index():
     return render_template("index.html")
 
 
-# -------- API --------
-
 @app.route("/api/orders")
 def api_orders():
     if not session.get("ok"):
         return redirect("/login")
-    return jsonify(fetch_orders())
+    return jsonify(get_orders())
 
 
 @app.route("/ready/<int:order_id>", methods=["POST"])
@@ -85,9 +85,6 @@ def ready(order_id):
     return {"ok": True}
 
 
-# -------- START --------
-
 if __name__ == "__main__":
-    import os
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
