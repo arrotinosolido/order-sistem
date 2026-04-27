@@ -1,23 +1,37 @@
 <!DOCTYPE html>
 <html>
-<body style='font-family:sans-serif'>
-<h1>Orders</h1>
-<div id='d'></div>
+<head>
+    <title>Orders</title>
+</head>
+<body>
+
+<h2>🍔 Заказы</h2>
+<div id="orders"></div>
 
 <script>
 async function load(){
- let r = await fetch('/api/orders');
- let j = await r.json();
- document.getElementById('d').innerHTML =
- j.map(o =>
- `<div>
- #${o.id} ${o.order_text} (${o.status})
- <button onclick="fetch('/ready/${o.id}',{method:'POST'}).then(load)">Ready</button>
- </div>`
- ).join('')
+    let res = await fetch('/api/orders');
+    let data = await res.json();
+
+    document.getElementById('orders').innerHTML =
+        data.map(o => `
+            <div style="border:1px solid #ccc;margin:10px;padding:10px;">
+                <b>#${o.id}</b><br>
+                ${o.text}<br>
+                <i>${o.status}</i><br>
+                <button onclick="ready(${o.id})">Готово</button>
+            </div>
+        `).join('');
 }
-setInterval(load,2000)
-load()
+
+async function ready(id){
+    await fetch('/ready/' + id, {method:'POST'});
+    load();
+}
+
+setInterval(load, 3000);
+load();
 </script>
+
 </body>
 </html>
