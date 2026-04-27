@@ -2,7 +2,7 @@ import os
 import asyncio
 import psycopg2
 from aiogram import Bot, Dispatcher, F
-from aiogram.types import Message
+from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import CommandStart
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -16,9 +16,19 @@ def db():
     return psycopg2.connect(DATABASE_URL, sslmode="require")
 
 
+# 🍔 меню кнопок
+menu = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="🍔 Бургер"), KeyboardButton(text="🍟 Картошка")],
+        [KeyboardButton(text="🥤 Кола"), KeyboardButton(text="🍕 Пицца")]
+    ],
+    resize_keyboard=True
+)
+
+
 @dp.message(CommandStart())
 async def start(message: Message):
-    await message.answer("🍔 Отправь свой заказ")
+    await message.answer("Выбери заказ 👇", reply_markup=menu)
 
 
 @dp.message(F.text)
@@ -35,12 +45,11 @@ async def order(message: Message):
         conn.commit()
         conn.close()
 
-        print("ORDER:", message.text)
-        await message.answer("✅ Заказ принят")
+        await message.answer("✅ Заказ принят", reply_markup=menu)
 
     except Exception as e:
-        print("ERROR:", e)
-        await message.answer("❌ Ошибка при заказе")
+        print(e)
+        await message.answer("❌ Ошибка")
 
 
 async def main():
