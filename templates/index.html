@@ -1,70 +1,37 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html>
 <head>
 <meta charset="UTF-8">
-<title>Касса заказов</title>
+<title>Касса</title>
 
 <style>
-body {
-    font-family: Arial;
-    margin: 0;
-    padding: 20px;
-    background: #f2f4f8;
-}
-
-h2 {
-    text-align: center;
-    margin-bottom: 20px;
-}
+body { font-family: Arial; background:#f4f6f9; padding:20px; }
+h2 { text-align:center; }
 
 #orders {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    gap: 15px;
+    display:grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px,1fr));
+    gap:15px;
 }
 
 .card {
-    background: white;
-    border-radius: 14px;
-    padding: 15px;
-    box-shadow: 0 5px 15px rgba(0,0,0,0.08);
-    transition: 0.2s;
-}
-
-.card:hover {
-    transform: translateY(-3px);
-}
-
-.id {
-    font-weight: bold;
-    color: #333;
-}
-
-.text {
-    margin: 10px 0;
-    font-size: 16px;
-}
-
-.status {
-    font-size: 13px;
-    color: gray;
+    background:white;
+    padding:15px;
+    border-radius:12px;
+    box-shadow:0 4px 10px rgba(0,0,0,0.1);
 }
 
 button {
-    margin-top: 10px;
-    width: 100%;
-    padding: 10px;
-    border: none;
-    border-radius: 10px;
-    background: #2ecc71;
-    color: white;
-    font-weight: bold;
-    cursor: pointer;
+    margin-top:5px;
+    width:100%;
+    padding:8px;
+    border:none;
+    border-radius:8px;
+    cursor:pointer;
 }
 
-button:hover {
-    background: #27ae60;
-}
+.cook { background:orange; color:white; }
+.ready { background:green; color:white; }
 </style>
 </head>
 
@@ -73,34 +40,45 @@ button:hover {
 <h2>🍔 Заказы</h2>
 <div id="orders"></div>
 
+<audio id="sound" src="https://www.soundjay.com/buttons/sounds/button-3.mp3"></audio>
+
 <script>
+let known = [];
+
 async function load(){
     let res = await fetch('/api/orders');
     let data = await res.json();
 
-    // показываем только активные
-    data = data.filter(o => o.status !== 'ready');
+    // 🔔 звук нового заказа
+    if(data.length && !known.includes(data[0].id)){
+        document.getElementById('sound').play();
+    }
+    known = data.map(o=>o.id);
 
     document.getElementById('orders').innerHTML =
-        data.map(o => `
+        data.filter(o=>o.status!='ready').map(o => `
             <div class="card" id="o-${o.id}">
-                <div class="id">Заказ #${o.id}</div>
-                <div class="text">${o.text}</div>
-                <div class="status">Статус: ${o.status}</div>
-                <button onclick="done(${o.id})">Готово</button>
+                <b>#${o.id}</b><br>
+                ${o.text}<br>
+                <small>${o.status}</small>
+
+                ${o.status=='new' ? `<button class="cook" onclick="cook(${o.id})">Готовится</button>`:''}
+                <button class="ready" onclick="ready(${o.id})">Готово</button>
             </div>
         `).join('');
 }
 
-async function done(id){
-    await fetch('/ready/' + id, {method:'POST'});
-
-    // 🔥 сразу убираем с экрана
-    let el = document.getElementById('o-' + id);
-    if(el) el.remove();
+async function cook(id){
+    await fetch('/cook/'+id,{method:'POST'});
+    load();
 }
 
-setInterval(load, 3000);
+async function ready(id){
+    await fetch('/ready/'+id,{method:'POST'});
+    document.getElementById('o-'+id)?.remove();
+}
+
+setInterval(load,2000);
 load();
 </script>
 
