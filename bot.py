@@ -1,11 +1,12 @@
 import os
-import psycopg2
 import asyncio
+import psycopg2
 from aiogram import Bot, Dispatcher, types
-from aiogram.filters import Command
+from aiogram.filters import CommandStart
+from aiogram.types import Message
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-DATABASE_URL = os.getenv("postgresql://postgres:LFdIShpQjedEyyAZtdmgVdmfWmzjmEVQ@postgres.railway.internal:5432/railway")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
@@ -15,25 +16,28 @@ def get_conn():
     return psycopg2.connect(DATABASE_URL, sslmode="require")
 
 
-@dp.message(Command("start"))
-async def start(msg: types.Message):
-    await msg.answer("🍔 Напишите заказ")
+# /start
+@dp.message(CommandStart())
+async def start(message: Message):
+    await message.answer("🍔 Отправь заказ текстом")
 
 
+# ВСЕ сообщения (ВАЖНО)
 @dp.message()
-async def order(msg: types.Message):
+async def handle_order(message: Message):
+
     conn = get_conn()
     cur = conn.cursor()
 
     cur.execute(
         "INSERT INTO orders (user_id, text, status) VALUES (%s, %s, %s)",
-        (msg.from_user.id, msg.text, "new")
+        (message.from_user.id, message.text, "new")
     )
 
     conn.commit()
     conn.close()
 
-    await msg.answer("✅ Заказ принят!")
+    await message.answer("✅ Заказ принят!")
 
 
 async def main():
