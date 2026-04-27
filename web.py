@@ -1,13 +1,20 @@
 from flask import Flask, render_template, request, redirect, session, jsonify
 import psycopg2
 import os
+import asyncio
+from aiogram import Bot
 
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 DATABASE_URL = os.getenv("DATABASE_URL")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "1234")
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
+bot = Bot(token=BOT_TOKEN)
+
+
+# -------- DB --------
 
 def get_conn():
     return psycopg2.connect(DATABASE_URL)
@@ -26,13 +33,17 @@ def fetch_orders():
     ]
 
 
-def mark_ready(order_id):
+def set_ready(order_id):
     conn = get_conn()
     cur = conn.cursor()
-    cur.execute("UPDATE orders SET status='ready' WHERE id=%s", (order_id,))
+    cur.execute("UPDATE orders SET status='ready' WHERE id=%s RETURNING user_id", (order_id,))
+    user = cur.fetchone()
     conn.commit()
     conn.close()
+    return user[0] if user else None
 
+
+# -------- AUTH --------
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -40,8 +51,10 @@ def login():
         if request.form.get("password") == ADMIN_PASSWORD:
             session["ok"] = True
             return redirect("/")
-    return "<form method=post><input name=password><button>Login</button></form>"
+    return "<form method='post'><input name='password'><button>Login</button></form>"
 
+
+# -------- UI --------
 
 @app.route("/")
 def index():
@@ -49,6 +62,8 @@ def index():
         return redirect("/login")
     return render_template("index.html")
 
+
+# -------- API --------
 
 @app.route("/api/orders")
 def api_orders():
@@ -62,9 +77,17 @@ def ready(order_id):
     if not session.get("ok"):
         return redirect("/login")
 
-    mark_ready(order_id)
-    return jsonify({"ok": True})
+    user_id = set_ready(order_id)
 
+    if user_id:
+        asyncio.run(bot.send_message(user_id, f"🎉 Ваш заказ #{order_id} готов!"))
+
+    return {"ok": True}
+
+
+# -------- START --------
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    import os
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
