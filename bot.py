@@ -18,29 +18,29 @@ def db():
 
 @dp.message(CommandStart())
 async def start(message: Message):
-    await message.answer("🍔 Напиши заказ")
+    await message.answer("🍔 Отправь свой заказ")
 
 
 @dp.message(F.text)
-async def handle(message: Message):
+async def order(message: Message):
     try:
         conn = db()
         cur = conn.cursor()
 
-        cur.execute(
-            "INSERT INTO orders (user_id, text, status) VALUES (%s, %s, %s)",
-            (message.from_user.id, message.text, "new")
-        )
+        cur.execute("""
+            INSERT INTO orders (user_id, text, status)
+            VALUES (%s, %s, %s)
+        """, (message.from_user.id, message.text, "new"))
 
         conn.commit()
         conn.close()
 
-        print("ORDER SAVED:", message.text)
-        await message.answer("✅ Заказ принят!")
+        print("ORDER:", message.text)
+        await message.answer("✅ Заказ принят")
 
     except Exception as e:
         print("ERROR:", e)
-        await message.answer(f"❌ Ошибка: {e}")
+        await message.answer("❌ Ошибка при заказе")
 
 
 async def main():
