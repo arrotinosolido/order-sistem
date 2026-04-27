@@ -1,8 +1,73 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
-    <title>Orders</title>
+<meta charset="UTF-8">
+<title>Касса заказов</title>
+
+<style>
+body {
+    font-family: Arial;
+    margin: 0;
+    padding: 20px;
+    background: #f2f4f8;
+}
+
+h2 {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+#orders {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 15px;
+}
+
+.card {
+    background: white;
+    border-radius: 14px;
+    padding: 15px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+    transition: 0.2s;
+}
+
+.card:hover {
+    transform: translateY(-3px);
+}
+
+.id {
+    font-weight: bold;
+    color: #333;
+}
+
+.text {
+    margin: 10px 0;
+    font-size: 16px;
+}
+
+.status {
+    font-size: 13px;
+    color: gray;
+}
+
+button {
+    margin-top: 10px;
+    width: 100%;
+    padding: 10px;
+    border: none;
+    border-radius: 10px;
+    background: #2ecc71;
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+button:hover {
+    background: #27ae60;
+}
+</style>
 </head>
+
 <body>
 
 <h2>🍔 Заказы</h2>
@@ -13,20 +78,26 @@ async function load(){
     let res = await fetch('/api/orders');
     let data = await res.json();
 
+    // показываем только активные
+    data = data.filter(o => o.status !== 'ready');
+
     document.getElementById('orders').innerHTML =
         data.map(o => `
-            <div style="border:1px solid #ccc;margin:10px;padding:10px;">
-                <b>#${o.id}</b><br>
-                ${o.text}<br>
-                <i>${o.status}</i><br>
-                <button onclick="ready(${o.id})">Готово</button>
+            <div class="card" id="o-${o.id}">
+                <div class="id">Заказ #${o.id}</div>
+                <div class="text">${o.text}</div>
+                <div class="status">Статус: ${o.status}</div>
+                <button onclick="done(${o.id})">Готово</button>
             </div>
         `).join('');
 }
 
-async function ready(id){
+async function done(id){
     await fetch('/ready/' + id, {method:'POST'});
-    load();
+
+    // 🔥 сразу убираем с экрана
+    let el = document.getElementById('o-' + id);
+    if(el) el.remove();
 }
 
 setInterval(load, 3000);
