@@ -1,4 +1,4 @@
-from flask import Flask, render_template, redirect, session, jsonify, request
+from flask import Flask, render_template, request, redirect, session, jsonify
 import psycopg2
 import os
 import asyncio
@@ -9,7 +9,7 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "1234")
 
 app = Flask(__name__)
-app.secret_key = "secret"
+app.secret_key = "secret-key"
 
 bot = Bot(token=BOT_TOKEN)
 
@@ -18,7 +18,7 @@ def db():
     return psycopg2.connect(DATABASE_URL, sslmode="require")
 
 
-# 🔥 АВТО-СОЗДАНИЕ ТАБЛИЦЫ И КОЛОНКИ
+# 🔥 авто создание базы
 def init_db():
     conn = db()
     cur = conn.cursor()
@@ -30,11 +30,6 @@ def init_db():
         text TEXT,
         status TEXT DEFAULT 'new'
     );
-    """)
-
-    cur.execute("""
-    ALTER TABLE orders
-    ADD COLUMN IF NOT EXISTS text TEXT;
     """)
 
     conn.commit()
@@ -60,12 +55,15 @@ def set_ready(order_id):
     conn = db()
     cur = conn.cursor()
 
-    cur.execute(
-        "UPDATE orders SET status='ready' WHERE id=%s RETURNING user_id",
-        (order_id,)
-    )
+    cur.execute("""
+        UPDATE orders
+        SET status='ready'
+        WHERE id=%s
+        RETURNING user_id
+    """, (order_id,))
 
     user = cur.fetchone()
+
     conn.commit()
     conn.close()
 
@@ -109,6 +107,5 @@ def ready(order_id):
 
 
 if __name__ == "__main__":
-    init_db()  # 🔥 ВАЖНО
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    init_db()
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
