@@ -1,8 +1,7 @@
 from flask import Flask, render_template, request, redirect, session, jsonify
 import psycopg2
 import os
-import asyncio
-from aiogram import Bot
+import requests
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -11,14 +10,12 @@ ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "1234")
 app = Flask(__name__)
 app.secret_key = "secret-key"
 
-bot = Bot(token=BOT_TOKEN)
-
 
 def db():
     return psycopg2.connect(DATABASE_URL, sslmode="require")
 
 
-# 🔥 авто создание базы
+# 🔥 создаём таблицу если нет
 def init_db():
     conn = db()
     cur = conn.cursor()
@@ -36,13 +33,29 @@ def init_db():
     conn.close()
 
 
+# 🔥 стабильная отправка в Telegram (без asyncio)
+def send_telegram(user_id, text):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    try:
+        requests.post(url, json={
+            "chat_id": user_id,
+            "text": text
+        }, timeout=5)
+    except Exception as e:
+        print("TG ERROR:", e)
+
+
 def get_orders():
     conn = db()
     cur = conn.cursor()
 
-    cur.execute("SELECT id, user_id, text, status FROM orders ORDER BY id DESC")
-    rows = cur.fetchall()
+    cur.execute("""
+        SELECT id, user_id, text, status
+        FROM orders
+        ORDER BY id DESC
+    """)
 
+    rows = cur.fetchall()
     conn.close()
 
     return [
@@ -101,7 +114,7 @@ def ready(order_id):
     user_id = set_ready(order_id)
 
     if user_id:
-        asyncio.run(bot.send_message(user_id, f"🎉 Ваш заказ #{order_id} готов!"))
+        send_telegram(user_id, f"🎉 Ваш заказ #{order_id} готов!")
 
     return {"ok": True}
 
