@@ -6,10 +6,10 @@ import threading
 import requests
 from bot import run_bot
 
+app = Flask(__name__)
+
 DATABASE_URL = os.getenv("DATABASE_URL")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-
-app = Flask(__name__)
 
 
 # -------- DB --------
@@ -46,34 +46,50 @@ def home():
 
 @app.route("/orders")
 def orders():
-    return jsonify(asyncio.run(get_orders()))
+    try:
+        return jsonify(asyncio.run(get_orders()))
+    except Exception as e:
+        return {"error": str(e)}
 
 
 @app.route("/ready/<int:oid>", methods=["POST"])
 def ready(oid):
-    order = asyncio.run(set_ready(oid))
+    try:
+        order = asyncio.run(set_ready(oid))
 
-    if order:
-        try:
-            requests.post(
-                f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-                json={
-                    "chat_id": order["user_id"],
-                    "text": f"🎉 Заказ #{oid} готов!"
-                }
-            )
-        except:
-            pass
+        if order:
+            try:
+                requests.post(
+                    f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+                    json={
+                        "chat_id": order["user_id"],
+                        "text": f"🎉 Заказ #{oid} готов!"
+                    }
+                )
+            except Exception as e:
+                print("❌ Telegram send error:", e)
 
-    return {"ok": True}
+        return {"ok": True}
+
+    except Exception as e:
+        return {"error": str(e)}
 
 
-# -------- START --------
+# -------- START BOT --------
 def start_bot():
-    run_bot()
+    print("🔥 STARTING BOT THREAD")
+
+    try:
+        run_bot()
+    except Exception as e:
+        print("❌ BOT CRASH:", e)
 
 
+# -------- RUN APP --------
 if __name__ == "__main__":
+    print("🚀 STARTING WEB SERVER")
+
+    # запускаем бота в фоне
     threading.Thread(target=start_bot, daemon=True).start()
 
     port = int(os.getenv("PORT", 8080))
