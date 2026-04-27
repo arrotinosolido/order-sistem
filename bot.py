@@ -5,7 +5,7 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-DATABASE_URL = os.getenv("DATABASE_URL")
+DATABASE_URL = os.getenv("postgresql://postgres:LFdIShpQjedEyyAZtdmgVdmfWmzjmEVQ@postgres.railway.internal:5432/railway")
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
