@@ -16,32 +16,25 @@ def db():
     return psycopg2.connect(DATABASE_URL, sslmode="require")
 
 
-# /start
 @dp.message(CommandStart())
 async def start(message: Message):
-    await message.answer("🍔 Отправь заказ текстом")
+    await message.answer("🍔 Напиши заказ")
 
 
-# ЛЮБОЕ сообщение (самый важный хендлер)
 @dp.message(F.text)
 async def handle(message: Message):
+    conn = db()
+    cur = conn.cursor()
 
-    try:
-        conn = db()
-        cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO orders (user_id, text, status) VALUES (%s, %s, %s)",
+        (message.from_user.id, message.text, "new")
+    )
 
-        cur.execute(
-            "INSERT INTO orders (user_id, text, status) VALUES (%s, %s, %s)",
-            (message.from_user.id, message.text, "new")
-        )
+    conn.commit()
+    conn.close()
 
-        conn.commit()
-        conn.close()
-
-        await message.answer("✅ Заказ принят")
-
-    except Exception as e:
-        await message.answer(f"❌ Ошибка: {e}")
+    await message.answer("✅ Заказ принят!")
 
 
 async def main():
