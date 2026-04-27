@@ -5,7 +5,7 @@ import asyncio
 from aiogram import Bot
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-DATABASE_URL = os.getenv("DATABASE_URL")
+DATABASE_URL = os.getenv("postgresql://postgres:LFdIShpQjedEyyAZtdmgVdmfWmzjmEVQ@postgres.railway.internal:5432/railway")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "1234")
 
 app = Flask(__name__)
