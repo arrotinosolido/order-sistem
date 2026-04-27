@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify
 import asyncio
 import asyncpg
 import os
@@ -74,7 +74,7 @@ def start_bot():
 
 
 if __name__ == "__main__":
-    threading.Thread(target=start_bot).start()
+    threading.Thread(target=start_bot, daemon=True).start()
 
     port = int(os.getenv("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
